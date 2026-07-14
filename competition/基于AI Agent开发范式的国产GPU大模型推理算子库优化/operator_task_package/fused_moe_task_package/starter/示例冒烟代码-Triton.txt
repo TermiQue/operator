@@ -1,0 +1,148 @@
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _routed_dot_kernel(
+    a,
+    b_col_major,
+    scale_a,
+    scale_b,
+    moe_weights,
+    expert_ids,
+    out,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+
+    offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    offs_k = tl.arange(0, BLOCK_K)
+
+    expert = tl.load(expert_ids + (pid_m * BLOCK_M) // 128)
+    expert64 = expert.to(tl.int64)
+    offs_n64 = offs_n.to(tl.int64)
+    offs_k64 = offs_k.to(tl.int64)
+    b_base = b_col_major + expert64 * N * K
+
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.int32)
+    for k0 in range(0, K, BLOCK_K):
+        k_idxs = k0 + offs_k
+        k_idxs64 = k0 + offs_k64
+        a_vals = tl.load(a + offs_m[:, None] * K + k_idxs[None, :])
+        b_vals = tl.load(b_base + k_idxs64[:, None] + offs_n64[None, :] * K)
+        acc += tl.dot(a_vals, b_vals, out_dtype=tl.int32)
+
+    sa = tl.load(scale_a + offs_m)
+    sb = tl.load(scale_b + expert * N + offs_n)
+    mw = tl.load(moe_weights + offs_m)
+    vals = acc.to(tl.float32) * sa[:, None] * sb[None, :] * mw[:, None]
+    tl.store(out + offs_m[:, None] * N + offs_n[None, :], vals)
+
+
+@triton.jit
+def _gather_dot_kernel(
+    a,
+    b_col_major,
+    scale_a,
+    scale_b,
+    moe_weights,
+    token_ids,
+    expert_ids,
+    out,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    TOPK: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+
+    offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
+    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+    offs_k = tl.arange(0, BLOCK_K)
+
+    token = tl.load(token_ids + offs_m) // TOPK
+    expert = tl.load(expert_ids + (pid_m * BLOCK_M) // 128)
+    expert64 = expert.to(tl.int64)
+    offs_n64 = offs_n.to(tl.int64)
+    offs_k64 = offs_k.to(tl.int64)
+    b_base = b_col_major + expert64 * N * K
+
+    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.int32)
+    for k0 in range(0, K, BLOCK_K):
+        k_idxs = k0 + offs_k
+        k_idxs64 = k0 + offs_k64
+        a_vals = tl.load(a + token[:, None] * K + k_idxs[None, :])
+        b_vals = tl.load(b_base + k_idxs64[:, None] + offs_n64[None, :] * K)
+        acc += tl.dot(a_vals, b_vals, out_dtype=tl.int32)
+
+    sa = tl.load(scale_a + token)
+    sb = tl.load(scale_b + expert * N + offs_n)
+    mw = tl.load(moe_weights + offs_m)
+    vals = acc.to(tl.float32) * sa[:, None] * sb[None, :] * mw[:, None]
+    tl.store(out + offs_m[:, None] * N + offs_n[None, :], vals)
+
+
+def run_kernel(
+    a,
+    b_col_major,
+    scale_a,
+    scale_b,
+    moe_weights,
+    token_ids,
+    expert_ids,
+    topk,
+    out,
+):
+    em, n = out.shape
+    a_rows, k = a.shape
+
+    block_m = 16
+    block_n = 64
+    block_k = 64
+    grid = (triton.cdiv(em, block_m), triton.cdiv(n, block_n))
+
+    if a_rows == em:
+        _routed_dot_kernel[grid](
+            a,
+            b_col_major,
+            scale_a,
+            scale_b,
+            moe_weights,
+            expert_ids,
+            out,
+            N=n,
+            K=k,
+            BLOCK_M=block_m,
+            BLOCK_N=block_n,
+            BLOCK_K=block_k,
+            num_warps=4,
+            num_stages=4,
+        )
+    else:
+        _gather_dot_kernel[grid](
+            a,
+            b_col_major,
+            scale_a,
+            scale_b,
+            moe_weights,
+            token_ids,
+            expert_ids,
+            out,
+            N=n,
+            K=k,
+            TOPK=int(topk),
+            BLOCK_M=block_m,
+            BLOCK_N=block_n,
+            BLOCK_K=block_k,
+            num_warps=4,
+            num_stages=4,
+        )

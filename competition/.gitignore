@@ -1,0 +1,79 @@
+# =========================
+# macOS
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+.venv/
+venv/
+env/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Build / Packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# =========================
+# C / C++ / CMake
+# =========================
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+Makefile
+*.o
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# =========================
+# Logs / Temp
+# =========================
+*.log
+*.tmp
+*.temp
+logs/
+tmp/
+
+# =========================
+# OS / Tool caches
+# =========================
+.cache/

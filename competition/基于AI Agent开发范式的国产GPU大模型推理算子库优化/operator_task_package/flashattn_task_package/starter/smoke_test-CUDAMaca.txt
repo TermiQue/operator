@@ -1,0 +1,119 @@
+#include <stdint.h>
+#include <cuda_bf16.h>
+#include <cuda_runtime.h>
+
+#define HEAD_DIM 128
+
+__global__ void paged_attention_kernel(
+    const __nv_bfloat16* q,
+    const __nv_bfloat16* k_cache_paged,
+    const __nv_bfloat16* v_cache_paged,
+    __nv_bfloat16* output,
+    const int32_t* cache_seqlens,
+    const int32_t* block_table,
+    int64_t batch_size,
+    int64_t seqlen_q,
+    int64_t num_heads,
+    int64_t num_heads_k,
+    int64_t headdim,
+    int64_t page_block_size,
+    int64_t blocks_per_batch)
+{
+    int batch_idx = blockIdx.x / num_heads;
+    int head_idx  = blockIdx.x % num_heads;
+    if (batch_idx >= batch_size || head_idx >= num_heads) return;
+
+    int seqlen = cache_seqlens[batch_idx];
+    int tid = threadIdx.x;
+
+    // 加载对应 head 的 query 元素
+    int64_t q_offset = ((batch_idx * seqlen_q + 0) * num_heads + head_idx) * headdim;
+    float q_val = __bfloat162float(q[q_offset + tid]);
+
+    // Online safe softmax 状态
+    float max_val = -1e38f;
+    float sum_exp = 0.0f;
+    float out_acc = 0.0f;
+    float scale = 1.0f / sqrtf(static_cast<float>(headdim));
+
+    // 静态共享内存，避免动态分配可能带来的兼容性问题
+    __shared__ float s_score[HEAD_DIM];
+
+    for (int token = 0; token < seqlen; ++token) {
+        int page_idx    = token / page_block_size;
+        int page_offset = token % page_block_size;
+        int physical_block = block_table[batch_idx * blocks_per_batch + page_idx];
+
+        // 读取 key 元素
+        const __nv_bfloat16* k_ptr = k_cache_paged
+            + (physical_block * page_block_size + page_offset) * (num_heads_k * headdim)
+            + head_idx * headdim;
+        float k_val = __bfloat162float(k_ptr[tid]);
+
+        // 点积 -> 共享内存归约
+        s_score[tid] = q_val * k_val;
+        __syncthreads();
+
+        for (int stride = HEAD_DIM >> 1; stride > 0; stride >>= 1) {
+            if (tid < stride) {
+                s_score[tid] += s_score[tid + stride];
+            }
+            __syncthreads();
+        }
+        float score = s_score[0] * scale;
+
+        // 更新 softmax 状态
+        float new_max = fmaxf(max_val, score);
+        float rescale = expf(max_val - new_max);
+        sum_exp = sum_exp * rescale + expf(score - new_max);
+        out_acc = out_acc * rescale;
+        max_val = new_max;
+
+        // 读取 value 元素，并累加（用最新 max 的权重）
+        const __nv_bfloat16* v_ptr = v_cache_paged
+            + (physical_block * page_block_size + page_offset) * (num_heads_k * headdim)
+            + head_idx * headdim;
+        float v_val = __bfloat162float(v_ptr[tid]);
+        out_acc += expf(score - max_val) * v_val;
+
+        __syncthreads();   // 确保下次迭代共享内存可安全复用
+    }
+
+    if (seqlen > 0) {
+        out_acc /= sum_exp;
+    } else {
+        out_acc = 0.0f;
+    }
+
+    int64_t out_offset = ((batch_idx * seqlen_q + 0) * num_heads + head_idx) * headdim + tid;
+    output[out_offset] = __float2bfloat16(out_acc);
+}
+
+extern "C" void run_kernel(
+    const __nv_bfloat16* q,
+    const __nv_bfloat16* k_cache_paged,
+    const __nv_bfloat16* v_cache_paged,
+    __nv_bfloat16* output,
+    const int32_t* cache_seqlens,
+    const int32_t* block_table,
+    int64_t batch_size,
+    int64_t seqlen_k,
+    int64_t seqlen_q,
+    int64_t num_heads,
+    int64_t num_heads_k,
+    int64_t headdim,
+    int64_t page_block_size,
+    int64_t num_blocks,
+    int64_t causal)
+{
+    int64_t blocks_per_batch = num_blocks / batch_size;
+    dim3 grid(batch_size * num_heads);
+    dim3 block(HEAD_DIM);
+
+    paged_attention_kernel<<<grid, block>>>(
+        q, k_cache_paged, v_cache_paged, output,
+        cache_seqlens, block_table,
+        batch_size, seqlen_q, num_heads, num_heads_k, headdim,
+        page_block_size, blocks_per_batch
+    );
+}

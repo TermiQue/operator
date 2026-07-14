@@ -1,0 +1,187 @@
+"""FlashAttention KV Cache Decode in TileLang."""
+
+import tilelang
+import tilelang.language as T
+from tilelang import jit
+
+NUM_SPLITS = 4
+real_kernel = None
+
+@jit(
+    pass_configs={
+        tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: False,
+    },
+)
+def build_kernel(
+    batch_size,
+    num_heads,
+    num_heads_k,
+    headdim,
+    page_block_size,
+    num_blocks,
+    causal,
+):
+    blocks_per_batch = num_blocks // batch_size
+    assert blocks_per_batch % NUM_SPLITS == 0, (
+        f"blocks_per_batch={blocks_per_batch} must be divisible by NUM_SPLITS={NUM_SPLITS}"
+    )
+    blocks_per_split = blocks_per_batch // NUM_SPLITS
+
+    BLOCK_M = 1
+    BLOCK_N = page_block_size
+    scale = (1.0 / headdim) ** 0.5 * 1.44269504  # log2(e)
+    dtype = "bfloat16"
+    accum_dtype = "float32"
+
+    # Use a large-negative-finite sentinel instead of -inf to avoid
+    # (-inf) - (-inf) = NaN when an entire split is masked out.
+    NEG_INF_SAFE = -1e30
+
+    @T.prim_func
+    def kernel(
+        Q: T.Tensor([batch_size, 1, num_heads, headdim], dtype),
+        K: T.Tensor([num_blocks, page_block_size, num_heads_k, headdim], dtype),
+        V: T.Tensor([num_blocks, page_block_size, num_heads_k, headdim], dtype),
+        Output: T.Tensor([batch_size, 1, num_heads, headdim], dtype),
+        cache_seqlens: T.Tensor([batch_size], "int32"),
+        block_table: T.Tensor([batch_size, blocks_per_batch], "int32"),
+    ):
+        # float32 workspace — avoids BF16StorageLegalize var-remap bug
+        glse = T.alloc_global([batch_size, num_heads, NUM_SPLITS], accum_dtype)
+        Output_partial = T.alloc_global(
+            [batch_size, 1, num_heads, NUM_SPLITS, headdim], accum_dtype
+        )
+
+        # ============= Stage 1: split kernel =============
+        with T.Kernel(NUM_SPLITS, num_heads, batch_size, threads=128) as (bs, bh, bz):
+            Q_shared = T.alloc_shared([BLOCK_M, headdim], dtype)
+            K_shared = T.alloc_shared([BLOCK_N, headdim], dtype)
+            V_shared = T.alloc_shared([BLOCK_N, headdim], dtype)
+            acc_s = T.alloc_fragment([BLOCK_M, BLOCK_N], accum_dtype)
+            acc_o = T.alloc_fragment([BLOCK_M, headdim], accum_dtype)
+            scores_max = T.alloc_fragment([BLOCK_M], accum_dtype)
+            scores_max_prev = T.alloc_fragment([BLOCK_M], accum_dtype)
+            scores_scale = T.alloc_fragment([BLOCK_M], accum_dtype)
+            scores_sum = T.alloc_fragment([BLOCK_M], accum_dtype)
+            logsum = T.alloc_fragment([BLOCK_M], accum_dtype)
+
+            T.copy(Q[bz, 0, bh, :], Q_shared)
+
+            kv_seqlen = cache_seqlens[bz]
+            split_k_start = bs * blocks_per_split
+
+            T.fill(acc_o, 0)
+            T.fill(logsum, 0)
+            # KEY FIX: use -1e30 instead of -inf to avoid (-inf)-(-inf)=NaN
+            T.fill(scores_max, NEG_INF_SAFE)
+
+            for k in T.Pipelined(blocks_per_split, num_stages=2):
+                global_k = split_k_start + k
+                physical_block = block_table[bz, global_k]
+                tok_offset = global_k * page_block_size
+
+                # ----- Q @ K^T (hand-written, M=1, masked) -----
+                T.copy(K[physical_block, 0:BLOCK_N, bh, :], K_shared)
+                T.fill(acc_s, 0)
+                for j in T.Parallel(BLOCK_N):
+                    if tok_offset + j < kv_seqlen:
+                        for d in T.serial(headdim):
+                            acc_s[0, j] = acc_s[0, j] + Q_shared[0, d] * K_shared[j, d]
+                    else:
+                        acc_s[0, j] = -T.infinity(accum_dtype)
+
+                # ----- online softmax -----
+                T.copy(scores_max, scores_max_prev)
+                # KEY FIX: use -1e30 instead of -inf here too
+                T.fill(scores_max, NEG_INF_SAFE)
+                T.reduce_max(acc_s, scores_max, dim=1, clear=False)
+                scores_max[0] = T.max(scores_max[0], scores_max_prev[0])
+                # (prev - cur) is now (finite - finite) = 0 when both are sentinel,
+                # never (-inf - (-inf)) = NaN
+                scores_scale[0] = T.exp2((scores_max_prev[0] - scores_max[0]) * scale)
+                for j in T.Parallel(BLOCK_N):
+                    acc_s[0, j] = T.exp2((acc_s[0, j] - scores_max[0]) * scale)
+                T.reduce_sum(acc_s, scores_sum, dim=1)
+                logsum[0] = logsum[0] * scores_scale[0] + scores_sum[0]
+                for d in T.Parallel(headdim):
+                    acc_o[0, d] = acc_o[0, d] * scores_scale[0]
+
+                # ----- P @ V (hand-written, fp32 accum) -----
+                T.copy(V[physical_block, 0:BLOCK_N, bh, :], V_shared)
+                for d in T.Parallel(headdim):
+                    for j in T.serial(BLOCK_N):
+                        acc_o[0, d] = acc_o[0, d] + acc_s[0, j] * V_shared[j, d]
+
+            # ----- final normalise & write partial state -----
+            # KEY FIX: add epsilon to avoid 0/0 = NaN when split is all-masked
+            safe_logsum = logsum[0] + 1e-30
+            for d in T.Parallel(headdim):
+                acc_o[0, d] = acc_o[0, d] / safe_logsum
+
+            lse_local = T.alloc_fragment([1], accum_dtype)
+            lse_local[0] = T.log2(safe_logsum) + scores_max[0] * scale
+            glse[bz, bh, bs] = lse_local[0]
+
+            for d in T.Parallel(headdim):
+                Output_partial[bz, 0, bh, bs, d] = acc_o[0, d]
+
+        # ============= Stage 2: combine kernel =============
+        with T.Kernel(num_heads, batch_size, threads=128) as (bh, bz):
+            lse_local = T.alloc_fragment([NUM_SPLITS], accum_dtype)
+            for s in T.serial(NUM_SPLITS):
+                lse_local[s] = glse[bz, bh, s]
+
+            lse_max = T.alloc_fragment([1], accum_dtype)
+            lse_max[0] = -T.infinity(accum_dtype)
+            for s in T.serial(NUM_SPLITS):
+                lse_max[0] = T.max(lse_max[0], lse_local[s])
+
+            lse_logsum = T.alloc_fragment([1], accum_dtype)
+            lse_logsum[0] = 0
+            for s in T.serial(NUM_SPLITS):
+                lse_logsum[0] = lse_logsum[0] + T.exp2(lse_local[s] - lse_max[0])
+            lse_logsum[0] = T.log2(lse_logsum[0]) + lse_max[0]
+
+            o_accum = T.alloc_fragment([headdim], accum_dtype)
+            T.fill(o_accum, 0)
+            for s in T.serial(NUM_SPLITS):
+                s_scale = T.exp2(lse_local[s] - lse_logsum[0])
+                for d in T.Parallel(headdim):
+                    o_accum[d] = o_accum[d] + Output_partial[bz, 0, bh, s, d] * s_scale
+
+            for d in T.Parallel(headdim):
+                Output[bz, 0, bh, d] = T.Cast(dtype, o_accum[d])
+
+    return kernel
+
+
+def run_kernel(
+    q,
+    k_cache_paged,
+    v_cache_paged,
+    output,
+    cache_seqlens,
+    block_table,
+    batch_size,
+    seqlen_k,
+    seqlen_q,
+    num_heads,
+    num_heads_k,
+    headdim,
+    page_block_size,
+    num_blocks,
+    causal,
+):
+    global real_kernel
+
+    B = int(batch_size)
+    H = int(num_heads)
+    HK = int(num_heads_k)
+    D = int(headdim)
+    PBS = int(page_block_size)
+    NB = int(num_blocks)
+
+    if real_kernel is None:
+        real_kernel = build_kernel(B, H, HK, D, PBS, NB, int(causal))
+
+    real_kernel(q, k_cache_paged, v_cache_paged, output, cache_seqlens, block_table)
