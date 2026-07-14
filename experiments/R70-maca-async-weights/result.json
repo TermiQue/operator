@@ -1,0 +1,59 @@
+{
+  "experiment_id": "R70-maca-async-weights",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": false,
+  "point_ms": [
+    null,
+    null,
+    null
+  ],
+  "baseline_ms": [
+    8.05279,
+    14.670006,
+    28.350161
+  ],
+  "improvement_pct": [
+    null,
+    null,
+    null
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "audit": {
+      "tilelang_version": "0.1.9+cuda.gitee6db437",
+      "target": "maca/xcore1000, warp_size=64, max_shared_memory_per_block=65536",
+      "target_has_async_copy": true,
+      "public_apis": [
+        "T.Pipelined",
+        "T.async_copy",
+        "T.maca_async_copy",
+        "T.maca_barrier_arrive_and_wait",
+        "T.gemm"
+      ],
+      "pipeline_lowering": "The installed compiler runs PipelinePlanning and InjectSoftwarePipeline for staged loops and exposes MACA memcpy_async through the public tilelang.language API. A generic stage-2 version of the baseline K128 weight buffers would require 128KB shared, above the target's 64KB limit."
+    },
+    "change": "In _moe_forward_kernel_all64, gate/up and down global-to-shared weight copies use T.maca_async_copy with separate local MACA barrier handles. The normal stacked_expert_tokens/up_logits-to-fragment copy is issued while weight copies are in flight. Each RS GEMM is preceded by explicit T.maca_barrier_arrive_and_wait calls for both independently issued weights. Tile sizes, threads, packs, swizzles, loops, shared-buffer shapes, and math are unchanged.",
+    "dependencies": "The candidate uses only the baseline imports torch, tilelang, and tilelang.language. T.maca_async_copy, T.alloc_maca_barrier, and T.maca_barrier_arrive_and_wait are public source-level TileLang APIs; no external extension or private dynamic library is used.",
+    "mechanical_fixes": [
+      "The first lowering attempt failed inside LegalizeSafeMemoryAccess::RewriteCPAsync with an internal non-bool And construction. The all64 public JIT pass configuration was therefore extended with tilelang.PassConfigKey.TL_DISABLE_SAFE_MEMORY_ACCESS=True. This exact key is publicly exported and expressible in the submitted Python source. Formal dimensions and padded block mapping make the affected accesses statically in bounds."
+    ],
+    "codegen_evidence": "After the pass fix, H512/I512 codegen and MXCC compilation succeeded. Generated source contained 8 memcpy_async<16> calls and 8 barrier_arrive_and_wait calls across the two device kernels.",
+    "correctness": {
+      "shape": "H512/I512/experts4/valid568/seed81394",
+      "runs_same_input": 10,
+      "baseline_max_abs_error": 0.000030517578125,
+      "baseline_mean_abs_error": 0.0000003450765007073642,
+      "candidate_min_max_abs_error": 0.0421905517578125,
+      "candidate_max_max_abs_error": 0.0440826416015625,
+      "candidate_min_mean_abs_error": 0.0016667430754750967,
+      "candidate_max_mean_abs_error": 0.0016711803618818521,
+      "max_pairwise_candidate_output_diff": 0.027538299560546875,
+      "nan_count": 0,
+      "inf_count": 0,
+      "wide_tolerance_allclose": true
+    },
+    "early_stop": "The same-input outputs are nondeterministic and the reference error is roughly three orders of magnitude above the baseline despite passing the benchmark's loose 0.05 tolerance. The candidate was rejected before formal short or long timing, and the explicit MACA async-weight family was stopped."
+  },
+  "recommendation": "reject"
+}

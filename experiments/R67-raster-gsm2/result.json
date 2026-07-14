@@ -1,0 +1,22 @@
+{
+  "experiment_id": "R67-raster-gsm2",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-2",
+  "correct": true,
+  "point_ms": [10.659000244140625, 18.71646484375, 37.5430419921875],
+  "baseline_ms": [7.997606201171875, 14.5744482421875, 28.1157421875],
+  "improvement_pct": [-33.277383, -28.419715, -33.530325],
+  "compile_error": null,
+  "resource_notes": {
+    "candidate_sha256": "BB14DBF3D3EF910FB20A8CACF865E2C225BBD091FC52C42D04E653994E914FA8",
+    "change": "Only the all64 task raster changes. Gate/up and down each retain their original CTA count and two launches, but use a one-dimensional pid grid mapped back to (bx, by) with the standard TileOps grouped-M formula and GROUP_SIZE_M=2.",
+    "small_shape": "hidden=256, intermediate=256, experts=4, valid=568, seed=81394: compiled, allclose=true, max_abs_error=7.62939453125e-06, mean_ms=0.11434666315714519.",
+    "formal_protocol": "All three points used seed=81394, warmup=10, iters=100, --check and passed allclose.",
+    "combined_improvement_pct": -32.020943,
+    "launches": "Two launches, unchanged from baseline. Total gate/up and down CTA counts are unchanged for every shape.",
+    "resources": "Tile, thread count, pack factors, shared-memory buffers, accumulator fragments, K loops, swizzle calls, and mathematics are byte-for-byte equivalent inside each mapped CTA. The compiler emitted no register or spill diagnostics.",
+    "mechanism": "GROUP_SIZE_M=2 interleaves two M tiles per N tile in the one-dimensional launch order. On C500 this conflicts with the effective locality/scheduling of the original two-dimensional grid and its swizzle, causing consistent 28-34% regressions.",
+    "random_groups": "Not run because every formal point regressed and the >=2% retention gate was already impossible."
+  },
+  "recommendation": "reject"
+}

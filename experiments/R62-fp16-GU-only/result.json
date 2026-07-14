@@ -1,0 +1,37 @@
+{
+  "experiment_id": "R62-fp16-GU-only",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": false,
+  "point_ms": [
+    null,
+    null,
+    null
+  ],
+  "baseline_ms": [
+    8.052789916992188,
+    14.670006103515625,
+    28.3501611328125
+  ],
+  "improvement_pct": [
+    null,
+    null,
+    null
+  ],
+  "compile_error": "MACA mxcc failed with four type errors in the all64 gate/up GEMMs: each generated FP16 accumulator operand has type float16x4, but the MACA GEMM intrinsic parameter requires float4. Representative diagnostic: cannot initialize a parameter of type vector of 4 float values with an lvalue of type float16x4.",
+  "resource_notes": {
+    "change": "Only _moe_forward_kernel_all64 was changed. The former accum_dtype was split into gate_accum_dtype=float16 and down_accum_dtype=float32; gate_local_0, gate_local_1, up_local_0, and up_local_1 use gate_accum_dtype, while out_local_0 and out_local_1 explicitly use down_accum_dtype. Tile, thread, pack, loop, and swizzle settings are unchanged.",
+    "mechanical_fixes": [],
+    "small_shape": "The requested hidden=512, intermediate=512, experts=4, valid=568, seed=81394 case reached MACA device compilation but did not produce a runnable kernel.",
+    "correctness_metrics": {
+      "max_abs_error": null,
+      "max_rel_error": null,
+      "nan_count": null,
+      "inf_count": null,
+      "reason": "No output was produced because device compilation failed."
+    },
+    "compiler_details": "Generated locals were half_t arrays and GEMM operands were loaded as float16x4. The existing MACA MMA macro accepts float4 accumulator vectors, producing four hard errors corresponding to the four gate/up accumulators. Compiler warnings about uninitialized internal cc0-cc3 variables and ignored minimum block counts preceded the hard type errors but were not the stopping cause.",
+    "early_stop": "Stopped immediately after small-shape compilation failure. No formal points or random-groups cases were run. Changing the GEMM intrinsic, policy, or accumulator interface would exceed this experiment's single variable."
+  },
+  "recommendation": "reject"
+}

@@ -1,0 +1,132 @@
+# =========================
+# macOS
+# =========================
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+\#*
+\.#*
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Virtual environments
+.env
+.envrc
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Build / Packaging
+# =========================
+build/
+dist/
+*.egg-info/
+wheels/
+wheelhouse/
+
+# =========================
+# C / C++ / CUDA / CMake
+# =========================
+CMakeFiles/
+CMakeCache.txt
+cmake-build/
+cmake-build-*/
+Makefile
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.gch
+*.pch
+*.slo
+*.lo
+*.ncu-rep
+compile_commands.json
+
+# =========================
+# Logs / Temp
+# =========================
+*.log
+*.tmp
+*.temp
+logs/
+tmp/
+
+# =========================
+# Experiment outputs (large binary/model files)
+# =========================
+*.pkl
+*.pkl_*
+*.csv
+*.tar.gz
+*.zip
+
+# =========================
+# OS / Tool caches
+# =========================
+.cache/
+
+# =========================
+# Claude / AI agents
+# =========================
+**/.claude/
+.agents/
+
+# =========================
+# Sensitive / Credentials
+# =========================
+docs/服务器账户密码.md
+docs/OJ平台一级服务器账户密码.md
+
+# =========================
+# Git
+# =========================
+*.orig
+.git_commit.txt
+
+# =========================
+# Misc
+# =========================
+*.bak

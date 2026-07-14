@@ -1,0 +1,34 @@
+{
+  "experiment_id": "R66-raster-gsm4",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": true,
+  "point_ms": [
+    10.38541259765625,
+    null,
+    null
+  ],
+  "baseline_ms": [
+    8.052789916992188,
+    14.670006103515625,
+    28.3501611328125
+  ],
+  "improvement_pct": [
+    -28.96664,
+    null,
+    null
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "change": "Only the all64 gate/up and down launch rasters changed. Each original 2D (Mtiles, Npacks) grid was flattened to an equal-size 1D grid and mapped back to (bx, by) with the standard GROUP_SIZE_M=4 formula. Four consecutive M64 child tiles are traversed for each N-pack within a group. Tile sizes, 512 threads, gate/down N-pack=2, swizzle calls and values, loops, GEMMs, and math are unchanged.",
+    "mechanical_fixes": [],
+    "mapping": "num_pid_in_group=4*Npacks; group_id=pid//num_pid_in_group; first_bx=group_id*4; actual_group_size_m=min(num_m_tiles-first_bx,4); bx=first_bx+(pid%num_pid_in_group)%actual_group_size_m; by=(pid%num_pid_in_group)//actual_group_size_m. Tail groups are handled without changing total CTA count.",
+    "small_correctness": "H512/I512/experts4/valid568 compiled and allclosed with max_abs_error=3.0517578125e-05 and mean_abs_error=3.450765007073642e-07.",
+    "formal_correctness": "Formal point 1 allclosed with max_abs_error=0.00048828125 and mean_abs_error=5.711251560569508e-06.",
+    "test_protocol": "Formal point 1 used warmup=10, iters=100, seed=81394 on server-64-1.",
+    "resources": "Compilation succeeded with no OOM, shared-memory-limit, spill, or runtime-resource error reported. The only diagnostic was the pre-existing TileLang PDL warning for the MACA target.",
+    "early_stop": "Formal point 1 regressed by 28.96664%, so the no-regression retention condition was already impossible. Points 2/3 and random-seed tests were not run under the workflow's direct-rejection rule for an obvious formal-point regression.",
+    "interpretation": "The 1D grouped ordering is strongly dominated on point 1. Retaining the existing T.use_swizzle calls does not preserve the original effective 2D block traversal after flattening; this is a plausible contributor, but the benchmark alone does not isolate it from reduced cross-N parallel distribution."
+  },
+  "recommendation": "reject"
+}

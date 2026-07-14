@@ -1,0 +1,32 @@
+{
+  "experiment_id": "R58-kpack2",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": true,
+  "point_ms": [
+    8.050744018554688,
+    14.671807861328125,
+    28.3301806640625
+  ],
+  "baseline_ms": [
+    8.052789916992188,
+    14.670006103515625,
+    28.3501611328125
+  ],
+  "improvement_pct": [
+    0.025406,
+    -0.012282,
+    0.070477
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "change": "Only the six T.gemm calls in _moe_forward_kernel_all64 were changed: gate_local_0, up_local_0, gate_local_1, up_local_1, out_local_0, and out_local_1 now explicitly pass k_pack=2.",
+    "mechanical_fixes": [],
+    "test_protocol": "server-64-1; seed=81394; all three formal points used warmup=10 and iters=100 per the recent dual-server protocol because the copied OJ table has missing warmup/iters cells.",
+    "correctness": "Small shape 256/256/4/568 compiled and allclosed (max_abs_error=7.62939453125e-06). All three formal points allclosed; max_abs_error was 0.00048828125, 0.0009765625, and 0.0009765625.",
+    "retest": "A second run completed for points 1 and 2 at 8.05170166015625 ms and 14.671900634765626 ms, both allclose. The second point-3 run was skipped after the parent applied the <2% early-stop rule.",
+    "resources": "Compilation succeeded. No OOM, shared-memory-limit, or runtime resource error was observed. The only compiler diagnostic was the pre-existing TileLang warning that PDL should be supported for the MACA target.",
+    "aggregate_improvement_pct": 0.039599
+  },
+  "recommendation": "reject"
+}

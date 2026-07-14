@@ -1,0 +1,32 @@
+{
+  "experiment_id": "R60-down-pack4-true",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": true,
+  "point_ms": [
+    9.108915405273438,
+    null,
+    null
+  ],
+  "baseline_ms": [
+    8.052789916992188,
+    14.670006103515625,
+    28.3501611328125
+  ],
+  "improvement_pct": [
+    -13.115026,
+    null,
+    null
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "change": "Only the all64 down stage changed: down_pack=4; hidden-N grid uses ceildiv(hidden, 4*128); four explicit FP32 output accumulator fragments; one up_shared fragment; one 128x128 FP16 down_shared buffer; T.serial K loop; each K tile copies up_logits once and statically performs four down_w copy-to-the-same-shared then gemm sequences. Gate/up is byte-identical to baseline.",
+    "mechanical_fixes": [],
+    "divisibility": "All formal hidden sizes are divisible by 512: 2048%512=0 and 7168%512=0. The small gate used hidden=512, intermediate=256; no hidden=256 boundary branch was added.",
+    "correctness": "Small shape 512/256/4/568 compiled and allclosed with max_abs_error=1.52587890625e-05. Formal point 1 allclosed with max_abs_error=0.00048828125.",
+    "test_protocol": "server-64-1; seed=81394; formal point 1 used warmup=10 and iters=100.",
+    "resources": "Static down shared allocation is 128*128*2=32768 bytes. The four logical FP32 accumulator fragments total 4*64*128*4=131072 bytes distributed across the 512-thread CTA. Compilation emitted no register-spill, shared-limit, OOM, or runtime-resource error; exact physical register count and spill bytes were not exposed by the standard TileLang compile output. The only diagnostic was the pre-existing PDL warning for the MACA target.",
+    "early_stop": "Formal point 1 regressed by 13.115026%, exceeding the 1% rejection threshold. Formal points 2/3 and random-groups seeds 1/20260713 were therefore not run."
+  },
+  "recommendation": "reject"
+}

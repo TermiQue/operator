@@ -1,0 +1,33 @@
+{
+  "experiment_id": "R72-force-weight-copy-width16",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": false,
+  "point_ms": [
+    null,
+    null,
+    null
+  ],
+  "baseline_ms": [
+    8.05279,
+    14.670006,
+    28.350161
+  ],
+  "improvement_pct": [
+    null,
+    null,
+    null
+  ],
+  "compile_error": "TileLang LayoutInference failed at src/op/parallel.cc:690 with: Vector size 8 is not divisible by coalesced width 16.",
+  "resource_notes": {
+    "change": "Only the six all64 global-weight-to-shared T.copy operations were changed: gate0, up0, gate1, up1, down0, and down1 explicitly pass coalesced_width=16. Input and up_logits copies to fragments, tiles, packs, stages, threads, swizzles, and math are unchanged.",
+    "mechanical_fixes": [],
+    "api_compliance": "coalesced_width is a public keyword argument of tilelang.language.copy. The candidate keeps the baseline imports and uses no extension or private dynamic library, so the source form itself is submission-sandbox compliant.",
+    "baseline_codegen": "The formal baseline H512/I512 all64 MACA source contains eight statically visible global weight load sites after loop specialization/peeling. Every gate_w, up_w, and down_w load is emitted as *(uint4*), i.e. 16 bytes or eight FP16 elements per thread.",
+    "candidate_codegen": "The explicit width-16 candidate did not reach MACA source generation or MXCC. During LayoutInference the planner determined an actual vector_size of 8 FP16 elements and rejected coalesced_width=16 because 8 % 16 != 0.",
+    "target_limit": "For this MACA/xcore1000 path the VectorizePlanner exposes at most the existing 128-bit weight load. The requested 16-FP16/32-byte width is not legal and therefore cannot alter codegen to a 256-bit load.",
+    "correctness": "Not run because compilation failed before device code generation.",
+    "early_stop": "Rejected immediately after the required remote compilation evidence. No alternate width and no performance test were attempted."
+  },
+  "recommendation": "reject"
+}

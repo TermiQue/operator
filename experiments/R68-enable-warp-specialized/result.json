@@ -1,0 +1,32 @@
+{
+  "experiment_id": "R68-enable-warp-specialized",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": true,
+  "point_ms": [
+    null,
+    14.67414794921875,
+    null
+  ],
+  "baseline_ms": [
+    8.052789916992188,
+    14.670006103515625,
+    28.3501611328125
+  ],
+  "improvement_pct": [
+    null,
+    -0.028233,
+    null
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "change": "The only change is the _moe_forward_kernel_all64 JIT pass config: TL_DISABLE_WARP_SPECIALIZED=True was changed to False. Kernel source, launch parameters, tiles, threads, pack factors, swizzles, loops, and math are unchanged.",
+    "mechanical_fixes": [],
+    "small_correctness": "H512/I512/experts4/valid568 compiled and allclosed with max_abs_error=3.0517578125e-05 and mean_abs_error=3.450765007073642e-07.",
+    "formal_correctness": "Formal point 2 allclosed with max_abs_error=0.0009765625 and mean_abs_error=1.0882066817430314e-05.",
+    "test_protocol": "Formal point 2 used warmup=10, iters=100, seed=81394 on server-64-1.",
+    "resources": "Compilation succeeded with no OOM, shared-memory-limit, spill, or runtime-resource error reported. The only diagnostic was the pre-existing TileLang PDL warning for the MACA target.",
+    "early_stop": "Formal point 2 regressed by 0.028233%, far below the required 2% improvement. The candidate was rejected immediately and no additional warp-specialization variants were explored."
+  },
+  "recommendation": "reject"
+}

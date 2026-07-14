@@ -1,0 +1,33 @@
+{
+  "experiment_id": "R64-H7168-down-fullM32-t256-pack2",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-1",
+  "correct": true,
+  "point_ms": [
+    null,
+    16.168765869140625,
+    null
+  ],
+  "baseline_ms": [
+    8.052789916992188,
+    14.670006103515625,
+    28.3501611328125
+  ],
+  "improvement_pct": [
+    null,
+    -10.21649,
+    null
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "change": "Only the all64 down stage is shape-specialized. For hidden=7168 it uses down_block_token=32, down_threads=256, and four down child CTAs per padded parent-128 block. For hidden=2048 the derived values remain M64, 512 threads, and two child CTAs. Gate/up remains M64, 512 threads, N-pack=2; down N-pack=2 and swizzle=8 are unchanged.",
+    "mechanical_fixes": [],
+    "mapping": "For hidden=7168, parent_bx=bx//4, tile_id=bx%4, and block_start=parent_bx*128+tile_id*32. routed_expert_weights remains indexed by raw_start+token_offset+i, while up_logits/out remain indexed by padded block_start+i.",
+    "boundary_correctness": "Directed H7168/I256/experts4/valid515/random-groups seed=1 compiled and allclosed. total_padded=640, max_abs_error=0.000244140625, mean_abs_error=5.6006988415902015e-06.",
+    "formal_correctness": "Formal point 2 allclosed with max_abs_error=0.0009765625 and mean_abs_error=1.0882066817430314e-05.",
+    "test_protocol": "Formal point 2 used warmup=10, iters=100, seed=81394 on server-64-1.",
+    "resources": "Compilation succeeded with no OOM, shared-memory-limit, spill, or runtime-resource error reported. Down shared-memory allocation is unchanged from the baseline pack=2 kernel; the only diagnostic was the pre-existing TileLang PDL warning for the MACA target.",
+    "early_stop": "Formal point 2 regressed by 10.21649%, exceeding the 1% rejection threshold. Point 3 was not run, and no M128/512 variant was scanned."
+  },
+  "recommendation": "reject"
+}

@@ -1,0 +1,19 @@
+{
+  "experiment_id": "R59-l2-persist",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-2",
+  "correct": true,
+  "point_ms": [7.996180419921875, 14.574788818359375, 28.10154541015625],
+  "baseline_ms": [7.997606201171875, 14.5744482421875, 28.1157421875],
+  "improvement_pct": [0.017828, -0.002337, 0.050494],
+  "compile_error": null,
+  "resource_notes": {
+    "candidate_sha256": "1B5D957BA893E407993055360E2CC29580AFAA8E4E4EF0B18D482E1BC4E316C3",
+    "change": "In _moe_forward_kernel_all64 only, annotate up_logits with T.annotate_l2_hit_ratio({up_logits: 0.8}) in both the gate/up producer and down consumer T.Kernel blocks; all tile/thread/swizzle/pack/GEMM settings are unchanged.",
+    "small_shape": "hidden=256, intermediate=256, experts=4, valid=568, seed=81394: compiled, allclose=true, max_abs_error=7.62939453125e-06, mean_ms=0.11468799908955891.",
+    "formal_protocol": "seed=81394, warmup=10, iters=100, --check; all three formal shapes passed allclose.",
+    "host_policy_evidence": "Default TVMFFI backend accepted the annotation, but get_host_source() contained zero __tvm_cuda_stream_set_access_policy_window_packed calls, zero reset calls, and zero access_policy occurrences, indicating the hint was likely silently dropped for this multi-kernel PrimFunc/backend.",
+    "retest": "A second full three-point run was started but immediately stopped at the principal agent's direction because the mechanism did not lower and the first run was entirely within +/-0.05% noise."
+  },
+  "recommendation": "reject"
+}

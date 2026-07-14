@@ -1,0 +1,24 @@
+{
+  "experiment_id": "R61-down-tailM32-H7168",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-2",
+  "correct": true,
+  "point_ms": [null, 14.49543212890625, 27.920693359375],
+  "baseline_ms": [7.997606201171875, 14.5744482421875, 28.1157421875],
+  "improvement_pct": [null, 0.542155, 0.693735],
+  "compile_error": null,
+  "resource_notes": {
+    "candidate_sha256": "8515CA0121DE4B1C6B4BCD227F82004753ED0D08138DD2351F5CCBF0F106F5A4",
+    "change": "Only hidden=7168 dispatches to a new three-launch all64 path. Gate/up remains M64, 512 threads, pack2. Full down remains M64, 512 threads, N128, pack2 and runs only for actual_rows==64. A third tail down kernel uses M32, 256 threads, N128, pack2 for the upper/lower 32-row halves of original partial M64 tiles. hidden=2048 retains the original path.",
+    "directed_correctness": [
+      "hidden=7168, intermediate=256, experts=4, valid=300: per-expert 64+11 rows, allclose=true, max_abs_error=0.000244140625.",
+      "hidden=7168, intermediate=256, experts=4, valid=180: per-expert 32+13 rows, allclose=true, max_abs_error=0.000244140625."
+    ],
+    "formal_protocol": "p2/p3 used seed=81394, warmup=10, iters=100, --check; both passed allclose.",
+    "combined_p2_p3_improvement_pct": 0.641986,
+    "shared_memory": "Each full/tail down CTA statically allocates two 128x128 float16 down-weight shared buffers, 65536 bytes total. The extra tail launch does not coexist in the same CTA. Gate/up shared allocation is unchanged.",
+    "register_spill": "The default TileLang/MACA compile log emitted no register-count or spill diagnostics. Tail uses two 32x128 FP32 accumulator fragments and one 32x128 float16 activation fragment with 256 threads.",
+    "stopped_early": "The required p2+p3 combined gain was below 3%, so p1 and random-groups seed 1/20260713 were not run, per the hard rejection threshold and principal-agent instruction."
+  },
+  "recommendation": "reject"
+}

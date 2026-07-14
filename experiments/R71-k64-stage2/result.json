@@ -1,0 +1,34 @@
+{
+  "experiment_id": "R71-k64-stage2",
+  "base_version": "980B77034ECF564E25596D11C7AA1CD0E556B9D7A805BDDF2B37BC920E4DB6D6",
+  "server": "server-64-2",
+  "correct": true,
+  "point_ms": [
+    null,
+    15.01766357421875,
+    null
+  ],
+  "baseline_ms": [
+    7.997606201171875,
+    14.5744482421875,
+    28.1157421875
+  ],
+  "improvement_pct": [
+    null,
+    -3.041044,
+    null
+  ],
+  "compile_error": null,
+  "resource_notes": {
+    "candidate_sha256": "A3210BE9D8ADDEEA2F3E5B36E7E1A3DF242D9753E218C247B04FF4A67BD78422",
+    "change": "Only the all64 down-projection path changes: K is reduced from 128 to 64, its activation and two weight tiles become 64-wide, and the existing T.Pipelined loop uses num_stages=2. The gate/up path, M/N tiles, 512 threads, pack factors, swizzles, output math, and launch structure remain at baseline.",
+    "shared_memory": "The staged down path has one 64x64 fp16 fragment tile and two 128x64 fp16 shared weight tiles. The two shared weight tiles total 32KB per logical stage and fit the MACA target's 64KB shared-memory limit for a two-stage software pipeline.",
+    "initial_attempt": "Applying K64/num_stages=2 to both gate/up and down first failed during PipelinePlanning: Multiple writes to overlapping buffer regions detected. Stage 1 and stage 5 were both writing overlapping regions of gate_shared. The controlled correction restored gate/up exactly to baseline and retained K64 stage2 only for down.",
+    "small_shape": "hidden=256, intermediate=256, experts=4, valid=568, seed=81394: compiled and allclose=true. mean_ms=0.11357866724332173, max_abs_error=7.62939453125e-06, mean_abs_error=1.9330082068336196e-07.",
+    "p2_short_protocol": "hidden=7168, intermediate=2048, experts=32, valid=4544, seed=81394, warmup=3, iters=20, --check: allclose=true and mean_ms=15.01766357421875.",
+    "codegen_evidence": "MACA PipelinePlanning forces generic async-copy lowering off for this software-pipeline route; generated device-source audit found zero memcpy_async and zero async wait-group instructions. This candidate therefore does not enter the explicit MACA async-copy family.",
+    "async_family_stop": "R70 independently demonstrated a nondeterministic race for explicit T.maca_async_copy: ten same-input runs had maximum pairwise output difference 0.027538299560546875 and reference error roughly three orders of magnitude above baseline. Per the Ultra safety gate, explicit/manual MACA async-copy and ping-pong variants are permanently stopped and were not tested or retained in R71.",
+    "stopped_early": "The p2 short result regressed by 3.041044% versus the server-64-2 baseline and therefore failed the required >=3% improvement gate. No formal 10/100 timing was run for p2, and p1/p3 were not run."
+  },
+  "recommendation": "reject"
+}
